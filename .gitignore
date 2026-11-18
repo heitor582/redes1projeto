@@ -1,0 +1,42 @@
+# Maven outputs
+**/target/
+*.class
+*.jar
+
+# Local runtime state
+/data/
+/logs/
+*.pid
+*.lck
+*.lock
+*.hprof
+hs_err_pid*.log
+*.log
+!docs/evidencias/*.log
+
+# IDE settings
+.idea/
+.vscode/
+*.iml
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary/editor files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+*.rej
+
+# Eclipse
+.classpath
+.project
+.settings/
+.metadata/
+bin/

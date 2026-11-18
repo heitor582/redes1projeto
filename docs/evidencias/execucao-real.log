@@ -1,0 +1,16 @@
+WELCOME|cfd7c4b7-0b07-4fd0-847d-1e15e97da135|REAL|macOS
+REGISTERED|cfd7c4b7-0b07-4fd0-847d-1e15e97da135
+RES|1|OK|STATE=STARTED
+METRIC|cfd7c4b7-0b07-4fd0-847d-1e15e97da135|1|1794569139534|REAL|NA|71.31|NA
+METRIC|cfd7c4b7-0b07-4fd0-847d-1e15e97da135|2|1794569140552|REAL|9.31|71.17|NA
+METRIC|cfd7c4b7-0b07-4fd0-847d-1e15e97da135|3|1794569141566|REAL|9.65|71.45|NA
+METRIC|cfd7c4b7-0b07-4fd0-847d-1e15e97da135|4|1794569142579|REAL|12.68|71.79|NA
+JAR: OSHI, JNA, common e 28 bibliotecas nativas JNA presentes
+Manifest-Version: 1.0
+Created-By: Maven JAR Plugin 3.4.1
+Build-Jdk-Spec: 24
+Main-Class: br.edu.netpulse.server.ServerMain
+
+
+NetPulse Swing: java -jar netpulse-client-1.0.0.jar. Configure hostname e portas na interface.
+
