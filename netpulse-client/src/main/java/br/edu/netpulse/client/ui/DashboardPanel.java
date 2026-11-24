@@ -1,7 +1,6 @@
 package br.edu.netpulse.client.ui;
 
 import br.edu.netpulse.client.network.NetPulseConnection;
-import br.edu.netpulse.client.network.TelemetryTracker;
 import br.edu.netpulse.common.*;
 import java.awt.*;
 import java.io.IOException;
@@ -66,6 +65,13 @@ public final class DashboardPanel extends JPanel {
     setBorder(new EmptyBorder(24, 24, 24, 24));
     alertCenter =
         new AlertCenterPanel(() -> connection, () -> generation, this::log, this::activity);
+    add(sidebarScroll(), BorderLayout.WEST);
+    add(mainPanel(), BorderLayout.CENTER);
+    bindActions();
+    controls(false);
+  }
+
+  private JScrollPane sidebarScroll() {
     JScrollPane sidebarScroll = new JScrollPane(sidebar());
     sidebarScroll.setBorder(null);
     sidebarScroll.setOpaque(false);
@@ -73,7 +79,10 @@ public final class DashboardPanel extends JPanel {
     sidebarScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
     sidebarScroll.setPreferredSize(new Dimension(242, 650));
     sidebarScroll.getVerticalScrollBar().setUnitIncrement(16);
-    add(sidebarScroll, BorderLayout.WEST);
+    return sidebarScroll;
+  }
+
+  private JPanel mainPanel() {
     JPanel main = Theme.panel(new BorderLayout(0, 20));
     JPanel header = Theme.panel(new BorderLayout());
     JPanel heading = Theme.vertical();
@@ -97,7 +106,10 @@ public final class DashboardPanel extends JPanel {
     footer.add(
         Theme.label("NETPULSE  /  MONITORAMENTO REMOTO", 10, Theme.MUTED), BorderLayout.EAST);
     main.add(footer, BorderLayout.SOUTH);
-    add(main, BorderLayout.CENTER);
+    return main;
+  }
+
+  private void bindActions() {
     connect.addActionListener(e -> connect());
     disconnect.addActionListener(e -> disconnect());
     start.addActionListener(e -> send("START"));
@@ -112,8 +124,8 @@ public final class DashboardPanel extends JPanel {
           for (int i = 0; i < 3; i++)
             send("SET_THRESHOLD|" + Metric.values()[i] + "|" + thresholds[i].getValue());
         });
-    controls(false);
   }
+
 
   private boolean commit(JSpinner spinner) {
     try {
@@ -280,16 +292,23 @@ public final class DashboardPanel extends JPanel {
   }
 
   private void connect() {
-    final int tp, up;
+    final int tcpPortNumber, udpPortNumber;
     try {
-      tp = Integer.parseInt(tcpPort.getText().trim());
-      up = Integer.parseInt(udpPort.getText().trim());
+      tcpPortNumber = Integer.parseInt(tcpPort.getText().trim());
+      udpPortNumber = Integer.parseInt(udpPort.getText().trim());
     } catch (NumberFormatException e) {
       log("Portas devem ser números de 1 a 65535");
       return;
     }
     String address = host.getText().trim();
-    int token = ++generation;
+    int connectionGeneration = ++generation;
+    prepareConnection();
+    NetPulseConnection newConnection = new NetPulseConnection(createConnectionListener(connectionGeneration));
+    connection = newConnection;
+    connector.submit(() -> openConnection(newConnection, address, tcpPortNumber, udpPortNumber, connectionGeneration));
+  }
+
+  private void prepareConnection() {
     controls(false);
     connect.setEnabled(false);
     disconnect.setEnabled(true);
@@ -297,86 +316,86 @@ public final class DashboardPanel extends JPanel {
     for (HistoryChart chart : charts) chart.clear();
     resetReadings();
     for (JProgressBar bar : bars) bar.setValue(0);
-    NetPulseConnection next =
-        new NetPulseConnection(
-            new NetPulseConnection.Listener() {
-              private void ui(Runnable task) {
-                SwingUtilities.invokeLater(
-                    () -> {
-                      if (token == generation) task.run();
-                    });
-              }
+  }
 
-              public void telemetry(SystemSnapshot s) {
-                queueSnapshot(s, token);
-              }
-
-              public void event(String line) {
-                ui(() -> showEvent(line));
-              }
-
-              public void error(String message) {
-                ui(() -> log(message));
-              }
-
-              public void state(String tcp, String udp, String monitoring) {
-                ui(
-                    () -> {
-                      tcpState.setText("TCP: " + tcp);
-                      udpState.setText(
-                          "UDP: " + (udp.startsWith("Registro sem") ? "Sem confirmação" : udp));
-                      udpState.setToolTipText(udp);
-                      monitorState.setText(monitoring);
-                      controls(tcp.equals("Conectado"));
-                      updateConnectionHint(tcp, monitoring);
-                    });
-              }
+  private NetPulseConnection.Listener createConnectionListener(int connectionGeneration) {
+    return new NetPulseConnection.Listener() {
+      private void updateCurrentConnectionUi(Runnable task) {
+        SwingUtilities.invokeLater(
+            () -> {
+              if (connectionGeneration == generation) task.run();
             });
-    connection = next;
-    connector.submit(
-        () -> {
-          try {
-            NetPulseConnection.Welcome w = next.connect(address, tp, up);
-            SwingUtilities.invokeLater(
-                () -> {
-                  if (token != generation || next.isClosed()) return;
-                  mode.setText(
-                      (w.mode() == Mode.REAL ? "DADOS REAIS" : "SIMULAÇÃO")
-                          + " — servidor "
-                          + w.platform());
-                  log("Conectado. Alertas globais disponíveis; telemetria inicialmente parada.");
-                  alertCenter.refresh();
-                  next.command("GET_STATUS")
-                      .whenComplete(
-                          (status, error) ->
-                              SwingUtilities.invokeLater(
-                                  () -> {
-                                    if (token != generation) return;
-                                    if (error != null) {
-                                      log("Falha ao ler limites globais: " + error.getMessage());
-                                      return;
-                                    }
-                                    for (String field : status.split(";")) {
-                                      String[] pair = field.split("=", 2);
-                                      for (Metric metric : Metric.values())
-                                        if (pair[0].equals(metric.name()))
-                                          thresholds[metric.ordinal()].setValue(
-                                              Protocol.number(pair[1]));
-                                    }
-                                  }));
-                });
-          } catch (IOException e) {
-            SwingUtilities.invokeLater(
-                () -> {
-                  if (token == generation) {
-                    controls(false);
-                    log(
-                        "Falha de conexão (endereço, recusa, timeout ou protocolo): "
-                            + e.getMessage());
-                  }
-                });
-          }
-        });
+      }
+
+      public void telemetry(SystemSnapshot snapshot) {
+        queueSnapshot(snapshot, connectionGeneration);
+      }
+
+      public void event(String line) {
+        updateCurrentConnectionUi(() -> showEvent(line));
+      }
+
+      public void error(String message) {
+        updateCurrentConnectionUi(() -> log(message));
+      }
+
+      public void state(String tcp, String udp, String monitoring) {
+        updateCurrentConnectionUi(() -> showConnectionState(tcp, udp, monitoring));
+      }
+    };
+  }
+
+  private void showConnectionState(String tcp, String udp, String monitoring) {
+    tcpState.setText("TCP: " + tcp);
+    udpState.setText(
+        "UDP: " + (udp.startsWith("Registro sem") ? "Sem confirmação" : udp));
+    udpState.setToolTipText(udp);
+    monitorState.setText(monitoring);
+    controls(tcp.equals("Conectado"));
+    updateConnectionHint(tcp, monitoring);
+  }
+
+  private void openConnection(
+      NetPulseConnection newConnection, String address, int tcpPortNumber, int udpPortNumber,
+      int connectionGeneration) {
+    try {
+      var welcome = newConnection.connect(address, tcpPortNumber, udpPortNumber);
+      SwingUtilities.invokeLater(() -> showWelcome(newConnection, welcome, connectionGeneration));
+    } catch (IOException e) {
+      SwingUtilities.invokeLater(() -> {
+        if (connectionGeneration != generation) return;
+        controls(false);
+        log("Falha de conexão (endereço, recusa, timeout ou protocolo): " + e.getMessage());
+      });
+    }
+  }
+
+  private void showWelcome(
+      NetPulseConnection newConnection, NetPulseConnection.Welcome welcome, int connectionGeneration) {
+    if (connectionGeneration != generation || newConnection.isClosed()) return;
+    mode.setText(
+        (welcome.mode() == Mode.REAL ? "DADOS REAIS" : "SIMULAÇÃO")
+            + " — servidor "
+            + welcome.platform());
+    log("Conectado. Alertas globais disponíveis; telemetria inicialmente parada.");
+    alertCenter.refresh();
+    newConnection.command("GET_STATUS").whenComplete((status, error) ->
+        SwingUtilities.invokeLater(() -> showServerStatus(connectionGeneration, status, error)));
+  }
+
+  private void showServerStatus(int connectionGeneration, String status, Throwable error) {
+    if (connectionGeneration != generation) return;
+    if (error != null) {
+      log("Falha ao ler limites globais: " + error.getMessage());
+      return;
+    }
+    for (String field : status.split(";")) {
+      String[] pair = field.split("=", 2);
+      for (Metric metric : Metric.values())
+        if (pair[0].equals(metric.name()))
+          thresholds[metric.ordinal()].setValue(
+              Protocol.number(pair[1]));
+    }
   }
 
   private void disconnect() {

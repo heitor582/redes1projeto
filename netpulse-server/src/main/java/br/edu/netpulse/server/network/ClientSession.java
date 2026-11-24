@@ -50,14 +50,7 @@ final class ClientSession implements AutoCloseable {
 
   synchronized String command(Protocol.Request r, SystemSnapshot snapshot) {
     if (r.command().equals("GET_ALERTS") || r.command().equals("GET_ACTIVE_ALERTS")) {
-      List<AlertRecord> page =
-          r.command().equals("GET_ACTIVE_ALERTS")
-              ? monitor.active()
-              : monitor.history(
-                  Protocol.cursor(r.args().get(0)), Protocol.historyLimit(r.args().get(1)));
-      for (AlertRecord entry : page) send(Protocol.historyEntry(r.id(), entry));
-      String result =
-          (r.command().equals("GET_ACTIVE_ALERTS") ? "ACTIVE=" : "HISTORY=") + page.size();
+      String result = sendAlertEntries(r);
       send(Protocol.response(r.id(), true, result));
       return result;
     }
@@ -99,6 +92,17 @@ final class ClientSession implements AutoCloseable {
     send(Protocol.response(r.id(), true, result));
 
     return result;
+  }
+
+  private String sendAlertEntries(Protocol.Request r) {
+    List<AlertRecord> page =
+        r.command().equals("GET_ACTIVE_ALERTS")
+            ? monitor.active()
+            : monitor.history(
+                Protocol.cursor(r.args().get(0)), Protocol.historyLimit(r.args().get(1)));
+    for (AlertRecord entry : page) send(Protocol.historyEntry(r.id(), entry));
+    return
+        (r.command().equals("GET_ACTIVE_ALERTS") ? "ACTIVE=" : "HISTORY=") + page.size();
   }
 
   public void close() {

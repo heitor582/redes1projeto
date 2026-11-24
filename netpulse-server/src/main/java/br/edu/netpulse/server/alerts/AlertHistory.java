@@ -36,38 +36,8 @@ public final class AlertHistory implements AutoCloseable {
     file = path.toAbsolutePath();
     Files.createDirectories(file.getParent());
     try {
-      lockChannel =
-          FileChannel.open(
-              file.resolveSibling(file.getFileName() + ".lock"),
-              StandardOpenOption.CREATE,
-              StandardOpenOption.WRITE);
-      fileLock = lockChannel.tryLock();
-      if (fileLock == null)
-        throw new IOException("Histórico já utilizado por outro servidor: " + file);
-      if (Files.exists(file))
-        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
-          String line;
-          long previous = 0;
-          while ((line = Protocol.readLine(in)) != null) {
-            if (line.startsWith("RULES|")) {
-              String[] f = Protocol.fields(line);
-              Protocol.count(f, 4);
-              for (int i = 0; i < 3; i++) {
-                Metric metric = Metric.values()[i];
-                thresholds.put(metric, metric.validateThreshold(Protocol.number(f[i + 1])));
-              }
-              continue;
-            }
-            AlertRecord record = AlertRecord.decode(line);
-            if (record.id() <= previous) throw new IOException("IDs fora de ordem no histórico");
-            previous = record.id();
-            persistedEntryCount++;
-            entries.addLast(record);
-            if (entries.size() > CAPACITY) entries.removeFirst();
-            nextId = Math.addExact(record.id(), 1);
-            persistedLastId = record.id();
-          }
-        }
+      lockHistoryFile();
+      loadHistory();
     } catch (IOException | RuntimeException e) {
       releaseLock();
       throw new IOException("Não foi possível abrir histórico " + file + ": " + e.getMessage(), e);
@@ -75,6 +45,48 @@ public final class AlertHistory implements AutoCloseable {
     persistence = Executors.newSingleThreadScheduledExecutor();
     persistence.scheduleWithFixedDelay(this::saveSafely, 500, 500, TimeUnit.MILLISECONDS);
   }
+
+  private void lockHistoryFile() throws IOException {
+    lockChannel =
+        FileChannel.open(
+            file.resolveSibling(file.getFileName() + ".lock"),
+            StandardOpenOption.CREATE,
+            StandardOpenOption.WRITE);
+    fileLock = lockChannel.tryLock();
+    if (fileLock == null)
+      throw new IOException("Histórico já utilizado por outro servidor: " + file);
+  }
+
+  private void loadHistory() throws IOException {
+    if (!Files.exists(file)) return;
+    try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
+      String line;
+      while ((line = Protocol.readLine(in)) != null) {
+        if (line.startsWith("RULES|")) loadThresholds(line);
+        else loadRecord(line);
+      }
+    }
+  }
+
+  private void loadThresholds(String line) {
+    String[] f = Protocol.fields(line);
+    Protocol.count(f, 4);
+    for (int i = 0; i < 3; i++) {
+      Metric metric = Metric.values()[i];
+      thresholds.put(metric, metric.validateThreshold(Protocol.number(f[i + 1])));
+    }
+  }
+
+  private void loadRecord(String line) throws IOException {
+    AlertRecord record = AlertRecord.decode(line);
+    if (record.id() <= persistedLastId) throw new IOException("IDs fora de ordem no histórico");
+    persistedEntryCount++;
+    entries.addLast(record);
+    if (entries.size() > CAPACITY) entries.removeFirst();
+    nextId = Math.addExact(record.id(), 1);
+    persistedLastId = record.id();
+  }
+
 
   public synchronized AlertRecord append(
       UUID session, SystemSnapshot snapshot, String event, double threshold) {
@@ -172,17 +184,7 @@ public final class AlertHistory implements AutoCloseable {
             || savedCount + additions.size() > JOURNAL_LIMIT
             || (!additions.isEmpty() && additions.get(0).id() != savedLastId + 1);
     if (compact) {
-      Path temp = Files.createTempFile(file.getParent(), "netpulse-alerts-", ".tmp");
-      try {
-        try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(temp))) {
-          out.write((rules + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
-          for (AlertRecord entry : copy)
-            out.write((entry.encode() + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        }
-        moveIntoPlace(temp);
-      } finally {
-        Files.deleteIfExists(temp);
-      }
+      rewriteHistory(rules, copy);
       savedCount = copy.size();
       savedLastId = latestId;
     } else if (!additions.isEmpty()) {
@@ -199,6 +201,20 @@ public final class AlertHistory implements AutoCloseable {
       savedConfigurationRevision = configVersion;
       persistedEntryCount = savedCount;
       persistedLastId = savedLastId;
+    }
+  }
+
+  private void rewriteHistory(String rules, List<AlertRecord> copy) throws IOException {
+    Path temp = Files.createTempFile(file.getParent(), "netpulse-alerts-", ".tmp");
+    try {
+      try (OutputStream out = new BufferedOutputStream(Files.newOutputStream(temp))) {
+        out.write((rules + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        for (AlertRecord entry : copy)
+          out.write((entry.encode() + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      }
+      moveIntoPlace(temp);
+    } finally {
+      Files.deleteIfExists(temp);
     }
   }
 
