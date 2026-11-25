@@ -90,6 +90,7 @@ public final class NetPulseServer implements AutoCloseable {
       throw new IllegalStateException("Servidor já iniciado");
     loops.submit(this::acceptLoop);
     loops.submit(this::registrationLoop);
+    // A coleta é compartilhada e continua sem clientes. O envio respeita o intervalo de cada sessão.
     sampler.scheduleWithFixedDelay(this::sample, 0, 500, TimeUnit.MILLISECONDS);
     dispatcher.scheduleWithFixedDelay(this::dispatch, 0, 25, TimeUnit.MILLISECONDS);
   }
@@ -110,6 +111,7 @@ public final class NetPulseServer implements AutoCloseable {
     while (running.get())
       try {
         Socket socket = tcp.accept();
+        // O handshake já ocupa uma vaga, pois a leitura do HELLO pode ficar bloqueada.
         if (!capacity.tryAcquire()) {
           socket.close();
           continue;
@@ -142,6 +144,7 @@ public final class NetPulseServer implements AutoCloseable {
       session = new ClientSession(socket, alerts);
       ClientSession target = session;
       writers.submit(target::writeLoop);
+      // Enfileira o WELCOME antes de expor a sessão às notificações de alertas.
       session.send("WELCOME|" + session.id + "|" + mode + "|" + platform);
       sessions.put(session.id, session);
       socket.setSoTimeout(0);
@@ -193,6 +196,7 @@ public final class NetPulseServer implements AutoCloseable {
         ClientSession session = sessions.get(Protocol.uuid(f[1]));
         if (session == null || session.socket.isClosed()) continue;
         synchronized (session) {
+          // O UUID identifica a sessão TCP. A origem deste datagrama indica para onde enviar as métricas.
           session.endpoint = new InetSocketAddress(packet.getAddress(), packet.getPort());
         }
         sendUdp(
@@ -208,6 +212,7 @@ public final class NetPulseServer implements AutoCloseable {
   }
 
   private void dispatch() {
+    // Usa a mesma amostra para todos os envios desta rodada, mesmo se a coleta publicar outra.
     SystemSnapshot snapshot = latest.get();
     if (snapshot == null) return;
     long now = System.nanoTime();

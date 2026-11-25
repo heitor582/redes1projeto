@@ -3,7 +3,7 @@ package br.edu.netpulse.client.network;
 import br.edu.netpulse.common.*;
 import java.util.UUID;
 
-/** Ordering and loss detection use local monotonic time, never remote wall clock. */
+/** A sequência ordena os datagramas. O relógio local mede o tempo sem receber telemetria. */
 public final class TelemetryTracker {
   private final UUID session;
   private final Mode mode;
@@ -19,6 +19,7 @@ public final class TelemetryTracker {
     if (!session.equals(metric.session())
         || mode != metric.snapshot().mode()
         || metric.sequence() <= sequence) return false;
+    // Avança a sequência mesmo em STOPPED para reconhecer pacotes antigos ao retomar.
     sequence = metric.sequence();
     if (!started) return false;
     lastReceived = now;

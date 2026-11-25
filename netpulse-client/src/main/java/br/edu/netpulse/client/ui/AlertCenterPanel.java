@@ -162,6 +162,7 @@ final class AlertCenterPanel extends JPanel {
     NetPulseConnection current = connection.get();
     if (!connected || current == null || current.isClosed()) return;
     if (loading) {
+      // Agrupa os pedidos de atualização recebidos durante a consulta em uma nova leitura.
       if (!olderPage) dirty = true;
       return;
     }

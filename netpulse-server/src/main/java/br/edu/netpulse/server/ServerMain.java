@@ -54,6 +54,7 @@ public final class ServerMain {
     System.out.printf(
         "NetPulse %s | TCP %d | UDP %d | %s%n",
         mode, server.tcpPort(), server.udpPort(), strategy.sourceDescription());
+    // A thread principal aguarda. No encerramento da JVM, o hook fecha o servidor.
     new CountDownLatch(1).await();
   }
 

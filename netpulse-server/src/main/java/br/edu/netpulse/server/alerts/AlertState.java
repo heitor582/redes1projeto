@@ -3,7 +3,7 @@ package br.edu.netpulse.server.alerts;
 import br.edu.netpulse.common.*;
 import java.util.*;
 
-/** One hysteresis latch per metric; callers define the shared or session scope. */
+/** Cada métrica tem um estado independente e usa uma margem de recuperação para evitar alertas repetidos perto do limite. */
 public final class AlertState {
   private final EnumMap<Metric, Boolean> active = new EnumMap<>(Metric.class);
 

@@ -24,6 +24,7 @@ public final class AlertMonitor {
           history.append(serverRun, snapshot, event, history.thresholds().get(metric));
       if (record.type().equals("ALERT")) active.put(metric, record);
       else active.remove(metric);
+      // Quando os clientes receberem o evento, já poderão consultar o histórico e os ativos.
       broadcast.accept(event);
     }
   }

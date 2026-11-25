@@ -69,6 +69,7 @@ public final class NetPulseConnection implements AutoCloseable {
       welcome = new Welcome(Protocol.uuid(f[1]), Mode.valueOf(f[2]), f[3]);
       tracker = new TelemetryTracker(welcome.session(), welcome.mode());
       udp = new DatagramSocket();
+      // Associa o destino e filtra a origem dos datagramas recebidos.
       udp.connect(address, udpPort);
       tcp.setSoTimeout(0);
       connectedAt = System.nanoTime();
@@ -111,6 +112,7 @@ public final class NetPulseConnection implements AutoCloseable {
       Protocol.request("REQ|" + id + "|" + command);
       if (closed.get() || welcome == null) throw new IOException("TCP desconectado");
       if (pending.size() >= 64) throw new IOException("Muitos comandos pendentes");
+      // Registra a espera antes do envio, pois a resposta pode chegar imediatamente.
       pending.put(
           id,
           new Pending(
@@ -153,6 +155,7 @@ public final class NetPulseConnection implements AutoCloseable {
           if (f[2].equals("ERROR")) p.future().completeExceptionally(new IOException(f[3]));
           else {
             if (p.records() != null) {
+              // A lista só fica pronta quando o RES confirma a contagem das linhas ENTRY.
               String expected = (p.active() ? "ACTIVE=" : "HISTORY=") + p.records().size();
               if (!f[3].equals(expected))
                 throw new IllegalArgumentException("INVALID_HISTORY_RESPONSE");
@@ -272,6 +275,7 @@ public final class NetPulseConnection implements AutoCloseable {
             .completeExceptionally(
                 new TimeoutException(
                     "Confirmação TCP não recebida; reconecte para sincronizar o estado"));
+        // O comando pode ter sido executado. Ao reconectar, o cliente sincroniza o estado.
         fail("Timeout de comando TCP");
         return;
       }

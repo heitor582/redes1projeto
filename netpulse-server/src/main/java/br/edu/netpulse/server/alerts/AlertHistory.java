@@ -161,6 +161,7 @@ public final class AlertHistory implements AutoCloseable {
     boolean compact;
     synchronized (this) {
       if (revision == savedRevision) return;
+      // Captura eventos e regras juntos. O disco é acessado depois de liberar o lock.
       copy = List.copyOf(entries);
       version = revision;
       configVersion = configurationRevision;
@@ -178,6 +179,8 @@ public final class AlertHistory implements AutoCloseable {
     List<AlertRecord> additions =
         copy.stream().filter(entry -> entry.id() > persistedThrough).toList();
     long latestId = copy.isEmpty() ? savedLastId : copy.get(copy.size() - 1).id();
+    // Uma lacuna indica que a retenção descartou eventos que ainda estavam pendentes.
+    // Nesse caso, reescreve o arquivo com os eventos que ainda estão em memória.
     compact =
         !Files.exists(file)
             || configVersion != savedConfigurationRevision
@@ -197,6 +200,7 @@ public final class AlertHistory implements AutoCloseable {
       savedLastId = latestId;
     }
     synchronized (this) {
+      // Alterações recebidas durante a escrita ficam pendentes para a próxima gravação.
       savedRevision = version;
       savedConfigurationRevision = configVersion;
       persistedEntryCount = savedCount;

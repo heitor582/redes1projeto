@@ -1,11 +1,15 @@
 # NetPulse — Sistema Multiplataforma de Monitoramento Remoto em Tempo Real
 
-**Integrantes:** [preencher nomes e matrículas]  
-**Disciplina:** [preencher]  
-**Professor:** [preencher]  
-**Instituição/Turma:** [preencher]  
-**Data da entrega:** [preencher]  
-**Versão técnica:** 1.0.0 — validação local em 13 de novembro de 2026.
+**Integrantes:** [
+        Caio Fernandes da Silva - 865873
+        Gustavo Lopes Oliveira - 869118
+        Heitor Canhestro Vieira Moreira - 867936
+        Vitor Costa Oliveira Rolla - 852439
+]  
+**Disciplina:** [Redes 1]  
+**Professor:** [Max do Val Machado]  
+**Instituição/Turma:** [PUC minas, ciência da computação 5 período]
+**Versão técnica:** 1.0.0.
 
 ## 1. Resumo
 

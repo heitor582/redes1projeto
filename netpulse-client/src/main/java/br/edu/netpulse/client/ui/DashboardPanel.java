@@ -323,6 +323,7 @@ public final class DashboardPanel extends JPanel {
       private void updateCurrentConnectionUi(Runnable task) {
         SwingUtilities.invokeLater(
             () -> {
+              // Uma reconexão pode ocorrer enquanto o evento aguarda na fila do Swing.
               if (connectionGeneration == generation) task.run();
             });
       }
@@ -498,6 +499,7 @@ public final class DashboardPanel extends JPanel {
       new java.util.concurrent.atomic.AtomicBoolean();
 
   private void queueSnapshot(SystemSnapshot snapshot, int token) {
+    // Se o Swing estiver ocupado, mantém apenas a amostra mais recente para exibir.
     latestUpdate.set(new Update(snapshot, token));
     if (updateQueued.compareAndSet(false, true)) SwingUtilities.invokeLater(this::drainSnapshot);
   }
@@ -506,6 +508,7 @@ public final class DashboardPanel extends JPanel {
     Update update = latestUpdate.getAndSet(null);
     if (update != null && update.generation() == generation) showSnapshot(update.snapshot());
     updateQueued.set(false);
+    // Uma amostra pode chegar antes de a tarefa atual liberar a vaga na fila do Swing.
     if (latestUpdate.get() != null && updateQueued.compareAndSet(false, true))
       SwingUtilities.invokeLater(this::drainSnapshot);
   }

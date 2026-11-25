@@ -27,6 +27,7 @@ final class ClientSession implements AutoCloseable {
 
   boolean send(String line) {
     if (closed.get()) return false;
+    // offer() retorna imediatamente. Se a fila encher, encerra a sessão do cliente lento.
     if (outgoing.offer(line)) return true;
     close();
     return false;
@@ -58,6 +59,7 @@ final class ClientSession implements AutoCloseable {
         switch (r.command()) {
           case "START" -> {
             started = true;
+            // Libera o envio na próxima verificação do dispatcher e preserva a sequência UDP.
             lastSent = 0;
             yield "STATE=STARTED";
           }
